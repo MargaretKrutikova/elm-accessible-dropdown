@@ -13,16 +13,26 @@ import List exposing (..)
 getOptions : Array Option
 getOptions =
     fromList
-        [ { id = "a1", label = "Home Delivery (DHL)" }
-        , { id = "a3", label = "Express Delivery (DHL)" }
-        , { id = "b2", label = "Racehorse" }
-        , { id = "c3", label = "Dove Delivery" }
-        , { id = "c4", label = "UPS Delivery (oh no)" }
+        [ { id = "Np", label = "Neptunium" }
+        , { id = "Pu", label = "Plutonium" }
+        , { id = "Am", label = "Americium" }
+        , { id = "Cm", label = "Curium" }
+        , { id = "Bk", label = "Berkelium" }
+        , { id = "Cf", label = "Californium" }
+        , { id = "Fm", label = "Fermium" }
+        , { id = "Md", label = "Mendelevium" }
+        , { id = "No", label = "Nobelium" }
+        , { id = "Lr", label = "Lawrencium" }
+        , { id = "Rf", label = "Rutherfordium" }
+        , { id = "Db", label = "Dubnium" }
+        , { id = "Sg", label = "Seaborgium" }
+        , { id = "Bh", label = "Bohrium" }
+        , { id = "Hs", label = "Hassium" }
         ]
 
 
 
-------------- MODEL -----------------------
+-- MODEL
 
 
 type alias Option =
@@ -51,7 +61,7 @@ initialModel =
 
 
 
-------------------- UPDATE ----------------
+-- UPDATE
 
 
 type Msg
@@ -59,8 +69,6 @@ type Msg
     | Open
     | Close
     | SelectOption String
-    | MouseDown (Maybe DomNode)
-    | FocusOut (Maybe DomNode)
     | KeyDown String
 
 
@@ -78,12 +86,6 @@ update msg model =
 
         SelectOption id ->
             ( { model | selectedId = Just id, open = False }, Cmd.none )
-
-        MouseDown target ->
-            ( closeIfOutside model target, Cmd.none )
-
-        FocusOut relatedTarget ->
-            ( closeIfOutside model relatedTarget, Cmd.none )
 
         KeyDown key ->
             if not model.open then
@@ -157,21 +159,8 @@ openDropdown model =
     { model | open = True, focusedIndex = getSelectedOptionIndex model |> Maybe.withDefault -1 }
 
 
-closeIfOutside : Model -> Maybe DomNode -> Model
-closeIfOutside model domNode =
-    let
-        isInside =
-            isInsideDropdown model.id domNode
-    in
-    if isInside then
-        model
 
-    else
-        { model | open = False }
-
-
-
------------------ VIEW ---------------
+-- VIEW
 
 
 type alias DropdownConfig =
@@ -193,8 +182,8 @@ viewDropdown model { placeholder } =
     div
         [ id model.id
         , class "dropdown"
-        , on "focusout" onFocusOut
-        , on "keydown" (onKeyDown KeyDown)
+        , on "focusout" (onFocusOut model)
+        , on "keydown" (onKeyDown KeyDown) -- TODO: scroll into view
         ]
         [ button
             [ class "dropdown-button"
@@ -209,14 +198,7 @@ viewDropdown model { placeholder } =
             ]
         , if model.open then
             ul [ class "dropdown-options", tabindex -1, attribute "role" "listbox" ]
-                ([ viewOption model ( -1, { id = "", label = placeholder } )
-                 ]
-                    ++ (getOptions
-                            |> Array.indexedMap Tuple.pair
-                            |> Array.map (\tuple -> viewOption model tuple)
-                            |> Array.toList
-                       )
-                )
+                (getAllOptions placeholder |> List.map (viewOption model))
 
           else
             text ""
@@ -244,6 +226,15 @@ viewOption model ( index, option ) =
         [ text option.label ]
 
 
+getAllOptions : String -> List ( Int, Option )
+getAllOptions placeholder =
+    ( -1, { id = "", label = placeholder } )
+        :: (getOptions
+                |> Array.indexedMap Tuple.pair
+                |> Array.toList
+           )
+
+
 isSelected : Model -> Option -> Bool
 isSelected model option =
     model.selectedId |> Maybe.map (\value -> option.id == value) |> Maybe.withDefault False
@@ -257,7 +248,7 @@ getSelectedOption options model =
 
 
 
------------- MAIN -----------------
+-- MAIN
 
 
 main : Program () Model Msg
@@ -266,27 +257,23 @@ main =
         { init = \_ -> ( initialModel, Cmd.none )
         , view = view
         , update = update
-        , subscriptions = subscriptions
+        , subscriptions =
+            \model ->
+                if model.open then
+                    Browser.Events.onMouseDown (outsideTarget "target" model.id)
+
+                else
+                    Sub.none
         }
 
 
-subscriptions : Model -> Sub Msg
-subscriptions model =
-    Browser.Events.onMouseDown (decodeEvent "target" |> Decode.map MouseDown)
+
+-- EVENTS
 
 
-
---------------  EVENTS ---------------------
-
-
-onFocusOut : Decode.Decoder Msg
-onFocusOut =
-    decodeEvent "relatedTarget" |> Decode.map FocusOut
-
-
-onMouseDown : Decode.Decoder Msg
-onMouseDown =
-    decodeEvent "target" |> Decode.map MouseDown
+onFocusOut : Model -> Decode.Decoder Msg
+onFocusOut model =
+    outsideTarget "relatedTarget" model.id
 
 
 onKeyDown : (String -> msg) -> Decode.Decoder msg
@@ -295,47 +282,35 @@ onKeyDown toMsg =
         |> Decode.andThen (\key -> Decode.succeed (toMsg key))
 
 
-decodeEvent : String -> Decode.Decoder (Maybe DomNode)
-decodeEvent propertyName =
-    Decode.at [ propertyName ] (Decode.nullable decodeDomNode)
+outsideTarget : String -> String -> Decode.Decoder Msg
+outsideTarget targetName dropdownId =
+    Decode.field targetName (isOutsideDropdown dropdownId)
+        |> Decode.andThen
+            (\isOutside ->
+                if isOutside then
+                    Decode.succeed Close
+
+                else
+                    Decode.fail "inside dropdown"
+            )
 
 
-type DomNode
-    = RootNode { id : String }
-    | ChildNode { id : String, parentNode : DomNode }
-
-
-decodeDomNode : Decode.Decoder DomNode
-decodeDomNode =
+isOutsideDropdown : String -> Decode.Decoder Bool
+isOutsideDropdown dropdownId =
     Decode.oneOf
-        [ decodeChildNode, decodeRootNode ]
+        [ Decode.field "id" Decode.string
+            |> Decode.andThen
+                (\id ->
+                    if dropdownId == id then
+                        -- found match by id
+                        Decode.succeed False
 
+                    else
+                        -- try next decoder
+                        Decode.fail "check parent node"
+                )
+        , Decode.lazy (\_ -> isOutsideDropdown dropdownId |> Decode.field "parentNode")
 
-decodeRootNode : Decode.Decoder DomNode
-decodeRootNode =
-    Decode.map (\x -> RootNode { id = x })
-        (Decode.field "id" Decode.string)
-
-
-decodeChildNode : Decode.Decoder DomNode
-decodeChildNode =
-    Decode.map2 (\id parentNode -> ChildNode { id = id, parentNode = parentNode })
-        (Decode.field "id" Decode.string)
-        (Decode.field "parentNode" (Decode.lazy (\_ -> decodeDomNode)))
-
-
-isInsideDropdown : String -> Maybe DomNode -> Bool
-isInsideDropdown dropdownId node =
-    case node of
-        Nothing ->
-            False
-
-        Just (RootNode { id }) ->
-            dropdownId == id
-
-        Just (ChildNode { id, parentNode }) ->
-            if dropdownId == id then
-                True
-
-            else
-                isInsideDropdown dropdownId (Just parentNode)
+        -- fallback if all previous decoders failed
+        , Decode.succeed True
+        ]

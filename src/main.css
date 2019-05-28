@@ -55,6 +55,9 @@ img {
   list-style-type: none;
   padding-inline-start: 0;
   margin-top: 5px;
+  max-height: 200px;
+  overflow-y: auto;
+  z-index: 1;
 }
 
 .dropdown-option {
