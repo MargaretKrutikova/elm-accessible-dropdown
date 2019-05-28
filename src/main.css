@@ -26,8 +26,14 @@ img {
   max-width: 200px;
 }
 
-.main {
+main {
   padding: 30px;
+  display: flex;
+  justify-content: space-between;
+}
+
+.simple-dropdown-section {
+  text-align: left;
 }
 
 /** dropdown */
@@ -55,6 +61,9 @@ img {
   list-style-type: none;
   padding-inline-start: 0;
   margin-top: 5px;
+  max-height: 200px;
+  overflow-y: auto;
+  z-index: 1;
 }
 
 .dropdown-option {
