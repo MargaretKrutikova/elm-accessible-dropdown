@@ -1,12 +1,14 @@
 module Main exposing (main)
 
 import Browser
+import Browser.Dom as Dom
 import Browser.Events
-import Html exposing (Html, button, div, input, li, text, ul)
-import Html.Attributes exposing (attribute, class, classList, disabled, id, value)
+import Html exposing (Html, button, div, h2, input, li, text, ul)
+import Html.Attributes exposing (attribute, class, classList, disabled, id, style, value)
 import Html.Events exposing (on, onClick)
 import Json.Decode as Decode
 import List exposing (..)
+import Task
 
 
 options : List Option
@@ -39,18 +41,28 @@ type alias Option =
     }
 
 
+type Visibility
+    = Visible
+    | Hidden
+
+
+type State
+    = Open Visibility
+    | Closed
+
+
 type alias Model =
-    { open : Bool
-    , id : String
-    , selectedId : Maybe String
+    { state : State
+    , dropdownId : String
+    , selectedId : String
     }
 
 
 initialModel : Model
 initialModel =
-    { open = False
-    , id = "dropdown"
-    , selectedId = Nothing
+    { state = Closed
+    , dropdownId = "dropdown"
+    , selectedId = ""
     }
 
 
@@ -60,25 +72,45 @@ initialModel =
 
 type Msg
     = Toggle
-    | Open
     | Close
     | SelectOption String
+    | ScrolledIntoSelected
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         Toggle ->
-            ( { model | open = not model.open }, Cmd.none )
+            case model.state of
+                Open _ ->
+                    ( { model | state = Closed }, Cmd.none )
 
-        Open ->
-            ( { model | open = True }, Cmd.none )
+                Closed ->
+                    openDropdown model
 
         Close ->
-            ( { model | open = False }, Cmd.none )
+            ( { model | state = Closed }, Cmd.none )
+
+        ScrolledIntoSelected ->
+            ( setVisibleIfOpen model, Cmd.none )
 
         SelectOption id ->
-            ( { model | selectedId = Just id, open = False }, Cmd.none )
+            ( { model | selectedId = id }, Cmd.none )
+
+
+openDropdown : Model -> ( Model, Cmd Msg )
+openDropdown model =
+    ( { model | state = Open Hidden }, scrollToSelectedOption model )
+
+
+setVisibleIfOpen : Model -> Model
+setVisibleIfOpen model =
+    case model.state of
+        Open _ ->
+            { model | state = Open Visible }
+
+        Closed ->
+            model
 
 
 
@@ -88,31 +120,36 @@ update msg model =
 view : Model -> Html Msg
 view model =
     div [ class "main" ]
-        [ viewDropdown model ]
+        [ h2 [] [ text "Simple dropdown" ]
+        , viewDropdown model
+        ]
 
 
 viewDropdown : Model -> Html Msg
 viewDropdown model =
     div
-        [ id model.id, class "dropdown" ]
+        [ id model.dropdownId, class "dropdown" ]
         [ button
             [ class "dropdown-button", onClick Toggle ]
             [ text
                 (model
                     |> getSelectedOption
-                    |> Maybe.map .label
-                    |> Maybe.withDefault "Choose element"
+                    |> Maybe.withDefault getDefaultOption
+                    |> .label
                 )
             ]
-        , if model.open then
-            ul [ class "dropdown-options" ]
-                ({ id = "", label = "Choose element" }
-                    :: options
-                    |> List.map (viewOption model)
-                )
+        , case model.state of
+            Open visibility ->
+                div
+                    ([ class "dropdown-options-container", id (getOptionsContainerId model) ]
+                        ++ getStyle visibility
+                    )
+                    [ ul [ class "dropdown-options" ]
+                        (getDefaultOption :: options |> List.map (viewOption model))
+                    ]
 
-          else
-            text ""
+            Closed ->
+                text ""
         ]
 
 
@@ -120,31 +157,42 @@ viewOption : Model -> Option -> Html Msg
 viewOption model option =
     li
         [ attribute "role" "option"
+        , id (getOptionElementId model option.id)
         , onClick (SelectOption option.id)
         , class "dropdown-option"
         , classList
-            [ ( "dropdown-option--selected", isSelected model option ) ]
+            [ ( "dropdown-option--selected", model.selectedId == option.id ) ]
         ]
         [ text option.label ]
 
 
-isSelected : Model -> Option -> Bool
-isSelected model option =
-    model.selectedId
-        |> Maybe.map (\value -> option.id == value)
-        |> Maybe.withDefault False
+getStyle : Visibility -> List (Html.Attribute Msg)
+getStyle visibility =
+    case visibility of
+        Visible ->
+            [ style "opacity" "1" ]
+
+        Hidden ->
+            [ style "opacity" "0" ]
 
 
 getSelectedOption : Model -> Maybe Option
 getSelectedOption model =
-    model.selectedId
-        |> Maybe.map
-            (\value ->
-                options
-                    |> List.filter (\option -> option.id == value)
-                    |> List.head
-            )
-        |> Maybe.withDefault Nothing
+    options
+        |> List.filter (\option -> option.id == model.selectedId)
+        |> List.head
+
+
+getOptionElementId model optionId =
+    model.dropdownId ++ "-" ++ optionId
+
+
+getOptionsContainerId model =
+    model.dropdownId ++ "-options-container"
+
+
+getDefaultOption =
+    { id = "", label = "Choose element" }
 
 
 
@@ -159,11 +207,12 @@ main =
         , update = update
         , subscriptions =
             \model ->
-                if model.open then
-                    Browser.Events.onMouseDown (outsideTarget "dropdown")
+                case model.state of
+                    Open _ ->
+                        Browser.Events.onMouseDown (outsideTarget "dropdown")
 
-                else
-                    Sub.none
+                    Closed ->
+                        Sub.none
         }
 
 
@@ -199,3 +248,22 @@ isOutsideDropdown dropdownId =
         -- fallback if all previous decoders failed
         , Decode.succeed True
         ]
+
+
+scrollToSelectedOption : Model -> Cmd Msg
+scrollToSelectedOption model =
+    Task.map2
+        getOptionScrollPosition
+        (Dom.getElement (getOptionElementId model model.selectedId))
+        (Dom.getElement (getOptionsContainerId model))
+        |> Task.andThen
+            (\top ->
+                Dom.setViewportOf (getOptionsContainerId model) 0 top
+            )
+        |> Task.attempt
+            (\_ -> ScrolledIntoSelected)
+
+
+getOptionScrollPosition : Dom.Element -> Dom.Element -> Float
+getOptionScrollPosition { element } containerElement =
+    element.y - containerElement.element.y - element.height
