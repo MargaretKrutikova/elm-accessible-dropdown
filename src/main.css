@@ -15,14 +15,26 @@ body {
   margin: 0;
   text-align: center;
   color: #293c4b;
+  height: 0;
+  height: 100vh;
+}
+
+* {
+  box-sizing: border-box;
 }
 
 h1 {
   font-size: 30px;
 }
+
+main {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
 .main {
   text-align: left;
-  padding: 30px;
   height: 100%;
 }
 
@@ -30,6 +42,7 @@ h1 {
 .dropdown {
   position: relative;
   max-width: 200px;
+  display: block;
 }
 
 .dropdown-button {
@@ -54,6 +67,7 @@ h1 {
   max-height: 200px;
   overflow-y: auto;
   z-index: 1;
+  width: 250px;
   transition: opacity 150ms ease-in-out;
 }
 
@@ -62,6 +76,7 @@ h1 {
   padding-inline-start: 0;
   margin-block-start: 0;
   margin-block-end: 0;
+  display: block;
 }
 
 .dropdown-option {
