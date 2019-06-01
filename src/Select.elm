@@ -59,14 +59,6 @@ initialStatus open =
         Closed
 
 
-type KeyPressed
-    = Up
-    | Down
-    | Enter
-    | Escape
-    | Other
-
-
 
 -- UPDATE
 
@@ -186,7 +178,7 @@ handleKeyWhenClosed key config state =
 handleKeyWhenOpen : KeyPressed -> UpdateConfig msg option -> State -> ( State, Cmd (Msg option), Maybe (OutMsg option) )
 handleKeyWhenOpen key ((UpdateConfig { options, toId }) as config) state =
     case key of
-        Enter ->
+        EnterOrSpace ->
             case options |> Array.get state.focusedIndex of
                 Just option ->
                     onSelectOption config state option
@@ -217,7 +209,7 @@ handleKeyWhenOpen key ((UpdateConfig { options, toId }) as config) state =
         Escape ->
             ( { state | status = Closed }, Cmd.none, Nothing )
 
-        _ ->
+        Other ->
             ( state, Cmd.none, Nothing )
 
 
@@ -503,13 +495,21 @@ keyDecoder state =
         |> Decode.map (\key -> ( KeyDown key, shouldPreventDefault state key ))
 
 
+type KeyPressed
+    = Up
+    | Down
+    | Escape
+    | EnterOrSpace
+    | Other
+
+
 shouldPreventDefault state key =
     case state.status of
         Closed ->
             False
 
         Open _ ->
-            key == Enter
+            key == EnterOrSpace
 
 
 toKeyPressed : String -> KeyPressed
@@ -525,7 +525,10 @@ toKeyPressed key =
             Escape
 
         "Enter" ->
-            Enter
+            EnterOrSpace
+
+        " " ->
+            EnterOrSpace
 
         _ ->
             Other
