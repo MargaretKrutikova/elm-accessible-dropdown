@@ -281,7 +281,7 @@ view config state =
                      ]
                         ++ getVisibilityStyle visibility
                     )
-                    [ ul [ class "dropdown-options", id "dropdown-options", tabindex -1, attribute "role" "listbox" ]
+                    [ ul [ class "dropdown-options", tabindex -1, attribute "role" "listbox" ]
                         (config.options
                             |> Array.indexedMap Tuple.pair
                             |> Array.map (viewOption config state)
@@ -320,7 +320,7 @@ getVisibilityStyle : DropdownVisibility -> List (Html.Attribute (Msg option))
 getVisibilityStyle visibility =
     case visibility of
         Visible ->
-            [ style "opacity" "1" ]
+            [ style "opacity" "1", style "scroll-behavior" "smooth" ]
 
         Hidden ->
             [ style "opacity" "0" ]
@@ -438,7 +438,7 @@ type ContainerId
 
 viewportPosition : Dom.Element -> Dom.Element -> ViewportPosition
 viewportPosition child container =
-    if offsetTop child container - child.element.height < 0 then
+    if offsetTop child container < 0 then
         Above
 
     else if offsetTop child container + child.element.height > container.element.height then

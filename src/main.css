@@ -69,7 +69,6 @@ main {
   z-index: 1;
   width: 250px;
   transition: opacity 150ms ease-in-out;
-  scroll-behavior: smooth;
 }
 
 .dropdown-options {
@@ -86,6 +85,7 @@ main {
   align-items: center;
   padding-left: 10px;
   cursor: default;
+  transition: background-color 150ms ease-in-out;
 }
 
 .dropdown-option:hover:not(.dropdown-option--selected),
