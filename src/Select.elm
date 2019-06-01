@@ -81,6 +81,7 @@ type Msg option
     | SelectOption option
     | KeyDown KeyPressed
     | ScrolledIntoSelected
+    | NoOp
 
 
 type UpdateConfig msg option
@@ -144,11 +145,14 @@ update config msg state =
                 Open Hidden ->
                     ( state, Cmd.none, Nothing )
 
+        NoOp ->
+            ( state, Cmd.none, Nothing )
+
 
 openDropdown : UpdateConfig msg option -> State -> ( State, Cmd (Msg option), Maybe (OutMsg option) )
-openDropdown config state =
+openDropdown ((UpdateConfig { selectedId }) as config) state =
     ( { state | status = Open Hidden, focusedIndex = getSelectedOptionIndex config }
-    , scrollToSelectedOption config state
+    , scrollToOption selectedId state
     , Nothing
     )
 
@@ -180,7 +184,7 @@ handleKeyWhenClosed key config state =
 
 
 handleKeyWhenOpen : KeyPressed -> UpdateConfig msg option -> State -> ( State, Cmd (Msg option), Maybe (OutMsg option) )
-handleKeyWhenOpen key ((UpdateConfig { options }) as config) state =
+handleKeyWhenOpen key ((UpdateConfig { options, toId }) as config) state =
     case key of
         Enter ->
             case options |> Array.get state.focusedIndex of
@@ -191,10 +195,24 @@ handleKeyWhenOpen key ((UpdateConfig { options }) as config) state =
                     ( state, Cmd.none, Nothing )
 
         Up ->
-            ( { state | focusedIndex = moveIndexUp options state.focusedIndex }, Cmd.none, Nothing )
+            let
+                focusedIndex =
+                    moveIndexUp options state.focusedIndex
+            in
+            ( { state | focusedIndex = focusedIndex }
+            , scrollToOptionByIndex config state focusedIndex
+            , Nothing
+            )
 
         Down ->
-            ( { state | focusedIndex = moveIndexDown options state.focusedIndex }, Cmd.none, Nothing )
+            let
+                focusedIndex =
+                    moveIndexDown options state.focusedIndex
+            in
+            ( { state | focusedIndex = focusedIndex }
+            , scrollToOptionByIndex config state focusedIndex
+            , Nothing
+            )
 
         Escape ->
             ( { state | status = Closed }, Cmd.none, Nothing )
@@ -214,7 +232,7 @@ moveIndexDown options currentIndex =
 
 moveIndexUp : Array option -> Int -> Int
 moveIndexUp options currentIndex =
-    if currentIndex < -1 then
+    if currentIndex <= 0 then
         (options |> Array.length) - 1
 
     else
@@ -263,7 +281,7 @@ view config state =
                      ]
                         ++ getVisibilityStyle visibility
                     )
-                    [ ul [ class "dropdown-options", tabindex -1, attribute "role" "listbox" ]
+                    [ ul [ class "dropdown-options", id "dropdown-options", tabindex -1, attribute "role" "listbox" ]
                         (config.options
                             |> Array.indexedMap Tuple.pair
                             |> Array.map (viewOption config state)
@@ -377,23 +395,105 @@ isOutsideDropdown dropdownId =
 -- scroll to selected
 
 
-scrollToSelectedOption : UpdateConfig msg option -> State -> Cmd (Msg option)
-scrollToSelectedOption (UpdateConfig { selectedId }) state =
+scrollToOption : String -> State -> Cmd (Msg option)
+scrollToOption optionId state =
+    scrollToElement
+        (getOptionElementId state optionId |> ChildId)
+        (getOptionsContainerId state |> ContainerId)
+        |> Task.attempt (\_ -> ScrolledIntoSelected)
+
+
+scrollToOptionByIndex : UpdateConfig msg option -> State -> Int -> Cmd (Msg option)
+scrollToOptionByIndex (UpdateConfig { options, toId }) state optionIndex =
+    case options |> Array.get optionIndex |> Maybe.map toId of
+        Nothing ->
+            Cmd.none
+
+        Just optionId ->
+            circularScroll
+                (getOptionElementId state optionId |> ChildId)
+                (getOptionsContainerId state |> ContainerId)
+                optionIndex
+                (Array.length options)
+                |> Task.attempt (\_ -> NoOp)
+
+
+
+-- SCROLL WHILE NAVIGATING WITH KEYBOARD
+
+
+type ViewportPosition
+    = Above
+    | Below
+    | Inside
+
+
+type ChildId
+    = ChildId String
+
+
+type ContainerId
+    = ContainerId String
+
+
+viewportPosition : Dom.Element -> Dom.Element -> ViewportPosition
+viewportPosition child container =
+    if offsetTop child container - child.element.height < 0 then
+        Above
+
+    else if offsetTop child container + child.element.height > container.element.height then
+        Below
+
+    else
+        Inside
+
+
+offsetTop : Dom.Element -> Dom.Element -> Float
+offsetTop child container =
+    child.element.y - container.element.y
+
+
+scrollToElement : ChildId -> ContainerId -> Task.Task Dom.Error ()
+scrollToElement (ChildId childId) (ContainerId containerId) =
     Task.map2
-        getOptionScrollPosition
-        (Dom.getElement (getOptionElementId state selectedId))
-        (Dom.getElement (getOptionsContainerId state))
+        offsetTop
+        (Dom.getElement childId)
+        (Dom.getElement containerId)
         |> Task.andThen
-            (\top ->
-                Dom.setViewportOf (getOptionsContainerId state) 0 top
+            (\top -> Dom.setViewportOf containerId 0 top)
+
+
+circularScroll : ChildId -> ContainerId -> Int -> Int -> Task.Task Dom.Error ()
+circularScroll (ChildId childId) (ContainerId containerId) currentIndex length =
+    Task.map3
+        (\option -> \container -> \viewport -> ( option, container, viewport ))
+        (Dom.getElement childId)
+        (Dom.getElement containerId)
+        (Dom.getViewportOf containerId)
+        |> Task.andThen
+            (\( option, container, { viewport, scene } ) ->
+                case viewportPosition option container of
+                    Above ->
+                        if currentIndex == 0 then
+                            Dom.setViewportOf containerId 0 0
+
+                        else
+                            Dom.setViewportOf containerId 0 (viewport.y - option.element.height)
+
+                    Below ->
+                        if currentIndex == length - 1 then
+                            Dom.setViewportOf containerId 0 scene.height
+
+                        else
+                            Dom.setViewportOf containerId 0 (viewport.y + option.element.height)
+
+                    Inside ->
+                        Task.succeed ()
             )
-        |> Task.attempt
-            (\_ -> ScrolledIntoSelected)
 
 
-getOptionScrollPosition : Dom.Element -> Dom.Element -> Float
-getOptionScrollPosition { element } containerElement =
-    element.y - containerElement.element.y - element.height
+
+-- KEYBOARD NAVIGATION
 
 
 keyDecoder : State -> Decode.Decoder ( Msg option, Bool )
