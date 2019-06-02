@@ -4,7 +4,7 @@ import Array exposing (..)
 import Browser
 import Html exposing (Html, button, div, input, li, pre, text, ul)
 import Html.Attributes exposing (attribute, class, classList, disabled, id, placeholder, src, style, tabindex, value)
-import Select
+import Select.Select as Select
 
 
 options : Array Option
@@ -72,25 +72,33 @@ init _ =
 
 type Msg
     = GotSelectMsg (Select.Msg Option)
+    | SelectValue ( Option, Select.State )
 
 
 selectUpdateConfig : Model -> Select.UpdateConfig Msg Option
 selectUpdateConfig model =
     Select.updateConfig
-        { closeOnSelect = True
-        , options = options
+        { options = options
         , selectedId = model.selectedId
         , toId = .id
         }
 
 
-selectViewConfig : Model -> Select.ViewConfig Option
+selectViewConfig : Model -> Select.ViewConfig Option Msg
 selectViewConfig model =
     { toId = .id
     , selectedId = model.selectedId
     , toLabel = .label
     , options = options
     , placeholder = "Select ..."
+    , optionDetails =
+        \option ->
+            { attributes = []
+            , children = [ text (option.label ++ " \u{1F92F}") ]
+            }
+    , toMsg = GotSelectMsg
+    , onSelect = SelectValue
+    , closeOnSelect = True
     }
 
 
@@ -99,20 +107,13 @@ update msg model =
     case msg of
         GotSelectMsg selectMsg ->
             let
-                ( select, outCmd, outMsg ) =
+                ( select, outCmd ) =
                     Select.update (selectUpdateConfig model) selectMsg model.select
             in
-            ( handleSelectMsg model select outMsg, Cmd.map GotSelectMsg outCmd )
+            ( { model | select = select }, Cmd.map GotSelectMsg outCmd )
 
-
-handleSelectMsg : Model -> Select.State -> Maybe (Select.OutMsg Option) -> Model
-handleSelectMsg model select msg =
-    case msg of
-        Just (Select.SelectedOption option) ->
-            { model | select = select, selectedId = option.id }
-
-        Nothing ->
-            { model | select = select }
+        SelectValue ( option, state ) ->
+            ( { model | selectedId = option.id, select = state }, Cmd.none )
 
 
 
@@ -137,7 +138,7 @@ view model =
             , style "left" "200px"
             ]
             [ div []
-                [ Html.map GotSelectMsg (Select.view (selectViewConfig model) model.select)
+                [ Select.view (selectViewConfig model) model.select
                 ]
             ]
         ]
