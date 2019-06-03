@@ -1,9 +1,9 @@
 module Select.Select exposing
     ( Msg
+    , SelectId(..)
     , State
     , UpdateConfig
     , ViewConfig
-    , customInitialState
     , initialState
     , update
     , updateConfig
@@ -16,12 +16,11 @@ import Browser.Dom as Dom
 import Browser.Events
 import Html exposing (Attribute, Html, button, div, input, li, text, ul)
 import Html.Attributes exposing (attribute, class, classList, disabled, id, placeholder, src, style, tabindex, value)
-import Html.Events exposing (on, onClick, preventDefaultOn)
+import Html.Events exposing (on, onClick, onInput, preventDefaultOn)
 import Json.Decode as Decode
 import List exposing (..)
 import Select.KeyboardNavigator exposing (..)
 import Select.ScrollUtils exposing (..)
-import Select.Types exposing (NavigationIndex(..), getByIndex, isEqual)
 import Task
 
 
@@ -41,25 +40,17 @@ type Status
 
 type alias State =
     { status : Status
-    , dropdownId : String -- TODO: consider DropdownId
-    , focusedIndex : NavigationIndex
+    , focusedIndex : Maybe Int
     }
 
 
-initialState : String -> State
-initialState dropdownId =
-    customInitialState { open = False, dropdownId = dropdownId }
-
-
-customInitialState :
+initialState :
     { open : Bool
-    , dropdownId : String
     }
     -> State
-customInitialState { open, dropdownId } =
+initialState { open } =
     { status = initialStatus open
-    , dropdownId = dropdownId
-    , focusedIndex = NavigationIndex -1
+    , focusedIndex = Nothing
     }
 
 
@@ -76,89 +67,151 @@ initialStatus open =
 -- UPDATE
 
 
+type SelectId
+    = SelectId String
+
+
 type Msg option
-    = Toggle
-    | Close
-    | OpenSelect
+    = Close
+    | OpenSelect SelectId
+    | SelectOption option
     | ScrolledIntoSelected
-    | Focus NavigationIndex
+    | KeyPress ( SelectId, KeyPressed )
     | NoOp
 
 
-type UpdateConfig msg option
-    = UpdateConfig
-        { options : Array option
-        , selectedId : String
-        , toId : option -> String
-        }
+type alias UpdateConfig option msg =
+    { toId : option -> String
+    , closeOnSelect : Bool
+    , onSelect : option -> msg
+    }
 
 
 updateConfig :
-    { options : Array option
-    , selectedId : String
-    , toId : option -> String
+    { toId : option -> String
+    , closeOnSelect : Bool
+    , onSelect : option -> msg
     }
-    -> UpdateConfig msg option
-updateConfig { options, selectedId, toId } =
-    UpdateConfig
-        { options = options
-        , selectedId = selectedId
-        , toId = toId
-        }
+    -> UpdateConfig option msg
+updateConfig { toId, closeOnSelect, onSelect } =
+    { toId = toId
+    , closeOnSelect = closeOnSelect
+    , onSelect = onSelect
+    }
 
 
-update : UpdateConfig msg option -> Msg option -> State -> ( State, Cmd (Msg option) )
-update ((UpdateConfig { selectedId, options }) as config) msg state =
+type alias Data option =
+    { selectedId : String
+    , options : Array option
+    }
+
+
+update : UpdateConfig option msg -> Msg option -> State -> Data option -> ( State, Cmd (Msg option), Maybe msg )
+update config msg state data =
     case msg of
-        Toggle ->
-            case state.status of
-                Open _ ->
-                    ( { state | status = Closed }, Cmd.none )
-
-                Closed ->
-                    openDropdown config state
-
         Close ->
-            ( { state | status = Closed }, Cmd.none )
+            ( { state | status = Closed }, Cmd.none, Nothing )
 
-        OpenSelect ->
-            openDropdown config state
+        OpenSelect selectId ->
+            openDropdown config selectId state data
+
+        SelectOption option ->
+            onSelectOption config state option
 
         ScrolledIntoSelected ->
             case state.status of
                 Open _ ->
-                    ( { state | status = Open Visible }, Cmd.none )
+                    ( { state | status = Open Visible }, Cmd.none, Nothing )
 
                 Closed ->
-                    ( state, Cmd.none )
+                    ( state, Cmd.none, Nothing )
 
-        Focus index ->
-            ( { state | focusedIndex = index }
-            , scrollToOptionByIndex config state index
-            )
+        KeyPress tuple ->
+            case state.status of
+                Open _ ->
+                    handleKeyWhenOpen tuple config state data
+
+                Closed ->
+                    handleKeyWhenClosed tuple config state data
 
         NoOp ->
-            ( state, Cmd.none )
+            ( state, Cmd.none, Nothing )
 
 
-openDropdown : UpdateConfig msg option -> State -> ( State, Cmd (Msg option) )
-openDropdown ((UpdateConfig { selectedId }) as config) state =
+openDropdown : UpdateConfig option msg -> SelectId -> State -> Data option -> ( State, Cmd (Msg option), Maybe msg )
+openDropdown { toId } selectId state { selectedId, options } =
     ( { state
         | status = Open Hidden
-        , focusedIndex = getSelectedOptionIndex config |> NavigationIndex
+        , focusedIndex =
+            options
+                |> Array.toIndexedList
+                |> List.filter (\( index, option ) -> selectedId == toId option)
+                |> List.head
+                |> Maybe.map Tuple.first
       }
-    , scrollToOption selectedId state
+    , scrollToOption selectId selectedId ScrolledIntoSelected
+    , Nothing
     )
 
 
-getSelectedOptionIndex : UpdateConfig msg option -> Int
-getSelectedOptionIndex (UpdateConfig { options, selectedId, toId }) =
-    options
-        |> Array.toIndexedList
-        |> List.filter (\( index, option ) -> selectedId == toId option)
-        |> List.head
-        |> Maybe.map Tuple.first
-        |> Maybe.withDefault -1
+handleKeyWhenClosed : ( SelectId, KeyPressed ) -> UpdateConfig option msg -> State -> Data option -> ( State, Cmd (Msg option), Maybe msg )
+handleKeyWhenClosed ( selectId, key ) config state data =
+    case key of
+        Up ->
+            openDropdown config selectId state data
+
+        Down ->
+            openDropdown config selectId state data
+
+        _ ->
+            ( state, Cmd.none, Nothing )
+
+
+handleKeyWhenOpen : ( SelectId, KeyPressed ) -> UpdateConfig option msg -> State -> Data option -> ( State, Cmd (Msg option), Maybe msg )
+handleKeyWhenOpen ( selectId, key ) config state ({ options } as data) =
+    case key of
+        EnterOrSpace ->
+            case Maybe.map (\ind -> Array.get ind options) state.focusedIndex |> Maybe.withDefault Nothing of
+                Just option ->
+                    onSelectOption config state option
+
+                Nothing ->
+                    ( state, Cmd.none, Nothing )
+
+        Up ->
+            moveFocusedIndex config selectId state data (moveIndexUp (Array.length options) state.focusedIndex)
+
+        Down ->
+            moveFocusedIndex config selectId state data (moveIndexDown (Array.length options) state.focusedIndex)
+
+        Escape ->
+            ( { state | status = Closed }, Cmd.none, Nothing )
+
+        Other ->
+            ( state, Cmd.none, Nothing )
+
+
+onSelectOption : UpdateConfig option msg -> State -> option -> ( State, Cmd (Msg option), Maybe msg )
+onSelectOption { closeOnSelect, onSelect } state option =
+    let
+        updatedState =
+            if closeOnSelect then
+                { state | status = Closed }
+
+            else
+                state
+    in
+    ( updatedState, Cmd.none, Just (onSelect option) )
+
+
+moveFocusedIndex : UpdateConfig option msg -> SelectId -> State -> Data option -> Int -> ( State, Cmd (Msg option), Maybe msg )
+moveFocusedIndex { toId } selectId state { options } index =
+    case options |> Array.get index |> Maybe.map toId of
+        Nothing ->
+            ( { state | focusedIndex = Just index }, Cmd.none, Nothing )
+
+        Just optionId ->
+            ( { state | focusedIndex = Just index }, scrollToOption selectId optionId NoOp, Nothing )
 
 
 
@@ -173,14 +226,10 @@ type alias HtmlDetails msg =
 
 type alias ViewConfig option msg =
     { toId : option -> String
-    , selectedId : String
-    , options : Array option
     , placeholder : String
     , toLabel : option -> String
     , optionDetails : option -> HtmlDetails msg
     , toMsg : Msg option -> msg
-    , closeOnSelect : Bool
-    , onSelect : ( option, State ) -> msg
     }
 
 
@@ -191,112 +240,109 @@ textOption str =
 
 viewConfig :
     { toId : option -> String
-    , selectedId : String
-    , options : Array option
     , placeholder : String
     , toLabel : option -> String
     , toMsg : Msg option -> msg
-    , onSelect : ( option, State ) -> msg
-    , closeOnSelect : Bool
     }
     -> ViewConfig option msg
 viewConfig config =
     { toId = config.toId
-    , selectedId = config.selectedId
-    , options = config.options
     , placeholder = config.placeholder
     , optionDetails = textOption << config.toLabel
     , toLabel = config.toLabel
     , toMsg = config.toMsg
-    , onSelect = config.onSelect
-    , closeOnSelect = config.closeOnSelect
     }
 
 
-navigatorConfig : ViewConfig option msg -> State -> NavigatorConfig msg
-navigatorConfig ({ toMsg, options } as config) state =
-    { onFocus = \index -> Focus index |> toMsg
-    , onOpen = OpenSelect |> toMsg
-    , onClose = Close |> toMsg
-    , onPress =
-        \(NavigationIndex index) ->
-            case options |> Array.get index of
-                Just option ->
-                    selectOption config state option
+toggleOpen : State -> Msg option
+toggleOpen state =
+    case state.status of
+        Open _ ->
+            Close
 
-                Nothing ->
-                    NoOp |> toMsg
-    , onNoOp = NoOp |> toMsg
-    }
+        Closed ->
+            OpenSelect (SelectId "dropdown")
 
 
-navigatorData : ViewConfig option msg -> State -> NavigatorData
-navigatorData { options } state =
-    { open = state.status /= Closed
-    , focusedIndex = state.focusedIndex
-    , total = Array.length options
-    }
-
-
-view : ViewConfig option msg -> State -> Html msg
-view ({ toMsg, onSelect, closeOnSelect, options } as config) state =
+view : ViewConfig option msg -> SelectId -> Data option -> State -> Html msg
+view ({ toMsg, toId } as config) (SelectId elementId) data state =
     div
-        [ id state.dropdownId
+        [ id elementId
         , class "dropdown"
-        , on "focusout" (onFocusOut toMsg state)
-        , keyNavigator
-            (navigatorConfig config state)
-            (navigatorData config state)
-            |> preventDefaultOn "keydown"
+        , on "focusout" (onFocusOut toMsg elementId)
+        , preventDefaultOn "keydown"
+            (Decode.map
+                (\key ->
+                    ( KeyPress ( SelectId elementId, key ) |> toMsg, shouldPreventDefault state.status key )
+                )
+                keyDecoder
+            )
         ]
+        -- [ input [ class "dropdown-button", onClick (toMsg <| toggleOpen state), value query, onInput config.onInput ]
+        --     []
         [ button
-            [ class "dropdown-button", onClick (toMsg Toggle) ]
-            [ text <| getButtonText config ]
+            [ class "dropdown-button", onClick (toMsg <| toggleOpen state) ]
+            [ text (getButtonText config data) ]
         , case state.status of
             Open visibility ->
-                div
-                    ([ class "dropdown-options-container"
-                     , id (getOptionsContainerId state)
-                     ]
-                        ++ getVisibilityStyle visibility
-                    )
-                    [ ul [ class "dropdown-options", tabindex -1, attribute "role" "listbox" ]
-                        (config.options
-                            |> Array.indexedMap Tuple.pair
-                            |> Array.map (viewOption config state)
-                            |> Array.toList
-                        )
-                    ]
+                viewOptions config visibility state data
 
             Closed ->
                 text ""
         ]
 
 
-selectOption : ViewConfig option msg -> State -> option -> msg
-selectOption { onSelect, closeOnSelect } state option =
-    case closeOnSelect of
-        True ->
-            onSelect ( option, { state | status = Closed } )
+viewOptions : ViewConfig option msg -> DropdownVisibility -> State -> Data option -> Html msg
+viewOptions config visibility state data =
+    div
+        ([ class "dropdown-options-container"
+         , id (getOptionsContainerId (SelectId "dropdown"))
+         ]
+            ++ getVisibilityStyle visibility
+        )
+        [ ul [ class "dropdown-options", tabindex -1, attribute "role" "listbox" ]
+            (data.options
+                |> Array.map
+                    (viewOption config
+                        data.selectedId
+                        "dropdown"
+                        (getOptionIdByIndex config.toId data.options state.focusedIndex)
+                    )
+                |> Array.toList
+            )
+        ]
 
-        False ->
-            onSelect ( option, state )
+
+getOptionIdByIndex toId options index =
+    index
+        |> Maybe.map (\value -> Array.get value options)
+        |> Maybe.withDefault Nothing
+        |> Maybe.map toId
 
 
-viewOption : ViewConfig option msg -> State -> ( Int, option ) -> Html msg
-viewOption ({ selectedId, toId, optionDetails, toMsg } as config) state ( index, option ) =
+equalId id optionalId =
+    case optionalId of
+        Nothing ->
+            False
+
+        Just value ->
+            id == value
+
+
+viewOption : ViewConfig option msg -> String -> String -> Maybe String -> option -> Html msg
+viewOption ({ toId, optionDetails, toMsg } as config) selectedId dropdownId focusedId option =
     li
         ([ attribute "role" "option"
-         , id (toId option |> getOptionElementId state)
-         , onClick (option |> selectOption config state)
+         , id (getOptionElementId (SelectId dropdownId) (toId option))
+         , onClick (SelectOption option |> toMsg)
          , class "dropdown-option"
          , classList
             [ ( "dropdown-option--selected", toId option == selectedId )
-            , ( "dropdown-option--focused", isEqual state.focusedIndex index )
+            , ( "dropdown-option--focused", equalId (toId option) focusedId )
             ]
          ]
             ++ (option |> optionDetails |> .attributes)
-            ++ (if isEqual state.focusedIndex index then
+            ++ (if equalId (toId option) focusedId then
                     [ attribute "aria-selected" "true" ]
 
                 else
@@ -319,35 +365,30 @@ getVisibilityStyle visibility =
             [ style "opacity" "0" ]
 
 
-getSelectedOption : ViewConfig option msg -> Maybe option
-getSelectedOption { options, selectedId, toId } =
+getButtonText : ViewConfig option msg -> Data option -> String
+getButtonText config { options, selectedId } =
     options
-        |> Array.filter (\option -> toId option == selectedId)
+        |> Array.filter (\option -> config.toId option == selectedId)
         |> Array.get 0
-
-
-getButtonText : ViewConfig option msg -> String
-getButtonText config =
-    getSelectedOption config
         |> Maybe.map config.toLabel
         |> Maybe.withDefault config.placeholder
 
 
-getOptionElementId state optionId =
-    state.dropdownId ++ "-" ++ optionId
+getOptionElementId (SelectId selectId) optionId =
+    selectId ++ "-" ++ optionId
 
 
-getOptionsContainerId state =
-    state.dropdownId ++ "-options-container"
+getOptionsContainerId (SelectId selectId) =
+    selectId ++ "-options-container"
 
 
 
 -- EVENTS
 
 
-onFocusOut : (Msg option -> msg) -> State -> Decode.Decoder msg
-onFocusOut toMsg state =
-    outsideTarget "relatedTarget" state.dropdownId
+onFocusOut : (Msg option -> msg) -> String -> Decode.Decoder msg
+onFocusOut toMsg id =
+    outsideTarget "relatedTarget" id
         |> Decode.map toMsg
 
 
@@ -371,16 +412,12 @@ isOutsideDropdown dropdownId =
             |> Decode.andThen
                 (\id ->
                     if dropdownId == id then
-                        -- found match by id
                         Decode.succeed False
 
                     else
-                        -- try next decoder
                         Decode.fail "check parent node"
                 )
         , Decode.lazy (\_ -> isOutsideDropdown dropdownId |> Decode.field "parentNode")
-
-        -- fallback if all previous decoders failed
         , Decode.succeed True
         ]
 
@@ -389,24 +426,54 @@ isOutsideDropdown dropdownId =
 -- scroll to selected
 
 
-scrollToOption : String -> State -> Cmd (Msg option)
-scrollToOption optionId state =
+scrollToOption : SelectId -> String -> Msg option -> Cmd (Msg option)
+scrollToOption selectId optionId msg =
     scrollToElement
-        (getOptionElementId state optionId |> toChildId)
-        (getOptionsContainerId state |> toContainerId)
-        |> Task.attempt (\_ -> ScrolledIntoSelected)
+        (getOptionElementId selectId optionId |> toChildId)
+        (getOptionsContainerId selectId |> toContainerId)
+        |> Task.attempt (\_ -> msg)
 
 
-scrollToOptionByIndex : UpdateConfig msg option -> State -> NavigationIndex -> Cmd (Msg option)
-scrollToOptionByIndex (UpdateConfig { options, toId }) state index =
-    case options |> getByIndex index |> Maybe.map toId of
+
+-- KEYBOARD NAVIGATION
+
+
+keyDecoder : Decode.Decoder KeyPressed
+keyDecoder =
+    Decode.field "key" Decode.string
+        |> Decode.map toKeyPressed
+
+
+shouldPreventDefault status key =
+    case status of
+        Open _ ->
+            key == EnterOrSpace
+
+        Closed ->
+            False
+
+
+moveIndexDown total focusedIndex =
+    case focusedIndex of
         Nothing ->
-            Cmd.none
+            0
 
-        Just optionId ->
-            scrollToNavigationIndex
-                (getOptionElementId state optionId |> toChildId)
-                (getOptionsContainerId state |> toContainerId)
-                (Array.length options)
-                index
-                |> Task.attempt (\_ -> NoOp)
+        Just index ->
+            if index >= total - 1 then
+                0
+
+            else
+                index + 1
+
+
+moveIndexUp total focusedIndex =
+    case focusedIndex of
+        Nothing ->
+            total - 1
+
+        Just index ->
+            if index <= 0 then
+                total - 1
+
+            else
+                index - 1

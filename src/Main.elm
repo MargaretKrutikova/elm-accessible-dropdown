@@ -54,13 +54,15 @@ main =
 type alias Model =
     { select : Select.State
     , selectedId : String
+    , query : String
     }
 
 
 init : () -> ( Model, Cmd Msg )
 init _ =
-    ( { select = Select.initialState "dropdown"
+    ( { select = Select.initialState { open = False }
       , selectedId = "Np"
+      , query = ""
       }
     , Cmd.none
     )
@@ -73,23 +75,33 @@ init _ =
 type Msg
     = GotSelectMsg (Select.Msg Option)
     | SelectValue ( Option, Select.State )
+    | SetQuery String
 
 
-selectUpdateConfig : Model -> Select.UpdateConfig Msg Option
+type SelectMsg
+    = SelectOption Option
+
+
+selectUpdateConfig : Model -> Select.UpdateConfig Option SelectMsg
 selectUpdateConfig model =
-    Select.updateConfig
-        { options = options
-        , selectedId = model.selectedId
-        , toId = .id
-        }
-
-
-selectViewConfig : Model -> Select.ViewConfig Option Msg
-selectViewConfig model =
     { toId = .id
-    , selectedId = model.selectedId
+    , closeOnSelect = True
+    , onSelect = SelectOption
+    }
+
+
+selectViewConfig : Select.ViewConfig Option Msg
+selectViewConfig =
+    { toId = .id
     , toLabel = .label
-    , options = options
+
+    -- , options =
+    --     Array.filter
+    --         (\option ->
+    --             String.isEmpty model.query
+    --                 || String.contains (String.toLower model.query) (String.toLower option.label)
+    --         )
+    --         options
     , placeholder = "Select ..."
     , optionDetails =
         \option ->
@@ -97,8 +109,6 @@ selectViewConfig model =
             , children = [ text (option.label ++ " \u{1F92F}") ]
             }
     , toMsg = GotSelectMsg
-    , onSelect = SelectValue
-    , closeOnSelect = True
     }
 
 
@@ -107,13 +117,21 @@ update msg model =
     case msg of
         GotSelectMsg selectMsg ->
             let
-                ( select, outCmd ) =
-                    Select.update (selectUpdateConfig model) selectMsg model.select
+                ( select, outCmd, outMsg ) =
+                    Select.update (selectUpdateConfig model) selectMsg model.select { selectedId = model.selectedId, options = options }
             in
-            ( { model | select = select }, Cmd.map GotSelectMsg outCmd )
+            case outMsg of
+                Nothing ->
+                    ( { model | select = select }, Cmd.map GotSelectMsg outCmd )
+
+                Just (SelectOption option) ->
+                    ( { model | select = select, selectedId = option.id }, Cmd.map GotSelectMsg outCmd )
 
         SelectValue ( option, state ) ->
             ( { model | selectedId = option.id, select = state }, Cmd.none )
+
+        SetQuery query ->
+            ( { model | query = query }, Cmd.none )
 
 
 
@@ -138,7 +156,10 @@ view model =
             , style "left" "200px"
             ]
             [ div []
-                [ Select.view (selectViewConfig model) model.select
+                [ Select.view selectViewConfig
+                    (Select.SelectId "dropdown")
+                    { options = options, selectedId = model.selectedId }
+                    model.select
                 ]
             ]
         ]
