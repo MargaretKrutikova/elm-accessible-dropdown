@@ -10,7 +10,8 @@ type KeyPressed
     = Up
     | Down
     | Escape
-    | EnterOrSpace
+    | Enter
+    | Space
     | Other
 
 
@@ -27,10 +28,10 @@ toKeyPressed key =
             Escape
 
         "Enter" ->
-            EnterOrSpace
+            Enter
 
         " " ->
-            EnterOrSpace
+            Space
 
         _ ->
             Other

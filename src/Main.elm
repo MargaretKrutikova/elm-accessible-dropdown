@@ -60,7 +60,7 @@ type alias Model =
 
 init : () -> ( Model, Cmd Msg )
 init _ =
-    ( { select = Select.initialState { open = False }
+    ( { select = Select.initialState { open = False, idAttribute = "dropdown" }
       , selectedId = "Np"
       , query = ""
       }
@@ -73,13 +73,13 @@ init _ =
 
 
 type Msg
-    = GotSelectMsg (Select.Msg Option)
+    = GotSelectMsg Select.Msg
     | SelectValue ( Option, Select.State )
     | SetQuery String
 
 
 type SelectMsg
-    = SelectOption Option
+    = SelectOption String
 
 
 selectUpdateConfig : Model -> Select.UpdateConfig Option SelectMsg
@@ -118,14 +118,17 @@ update msg model =
         GotSelectMsg selectMsg ->
             let
                 ( select, outCmd, outMsg ) =
-                    Select.update (selectUpdateConfig model) selectMsg model.select { selectedId = model.selectedId, options = options }
+                    Select.update (selectUpdateConfig model)
+                        selectMsg
+                        model.select
+                        { selectedOptionId = Just model.selectedId, options = options }
             in
             case outMsg of
                 Nothing ->
                     ( { model | select = select }, Cmd.map GotSelectMsg outCmd )
 
-                Just (SelectOption option) ->
-                    ( { model | select = select, selectedId = option.id }, Cmd.map GotSelectMsg outCmd )
+                Just (SelectOption id) ->
+                    ( { model | select = select, selectedId = id }, Cmd.map GotSelectMsg outCmd )
 
         SelectValue ( option, state ) ->
             ( { model | selectedId = option.id, select = state }, Cmd.none )
@@ -157,8 +160,7 @@ view model =
             ]
             [ div []
                 [ Select.view selectViewConfig
-                    (Select.SelectId "dropdown")
-                    { options = options, selectedId = model.selectedId }
+                    { options = options, selectedOptionId = Just model.selectedId }
                     model.select
                 ]
             ]
