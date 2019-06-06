@@ -1,9 +1,15 @@
-module Select.KeyboardNavigator exposing
+module Select.Keyboard exposing
     ( KeyPressed(..)
+    , NavigationStrategy(..)
     , toKeyPressed
     )
 
 import Json.Decode as Decode
+
+
+type NavigationStrategy
+    = Circular
+    | StayOnBoundary
 
 
 type KeyPressed

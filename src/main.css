@@ -85,15 +85,20 @@ main {
   align-items: center;
   padding-left: 10px;
   cursor: default;
+  cursor: pointer;
   transition: background-color 150ms ease-in-out;
 }
 
 .dropdown-option:hover:not(.dropdown-option--selected),
 .dropdown-option--focused {
-  background: #ccc;
+  background: #ddd;
 }
 
 .dropdown-option--selected {
-  background: rgb(57, 120, 255);
-  color: #fff;
+  background: rgb(212, 212, 212);
+  font-weight: bold;
+}
+
+.dropdown-option--selected.dropdown-option--focused {
+  background: rgb(190, 190, 190);
 }

@@ -1,33 +1,7 @@
-module Select.ScrollUtils exposing
-    ( scrollToElement
-    , toChildId
-    , toContainerId
-    )
+module Select.ScrollUtils exposing (scrollToElement)
 
 import Browser.Dom as Dom
 import Task
-
-
-type ViewportPosition
-    = Above Int
-    | Below Int
-    | Inside
-
-
-type ChildId
-    = ChildId String
-
-
-toChildId =
-    ChildId
-
-
-type ContainerId
-    = ContainerId String
-
-
-toContainerId =
-    ContainerId
 
 
 offsetTop : Dom.Element -> Dom.Element -> Float
@@ -52,8 +26,8 @@ viewportAdjustment child container =
         Nothing
 
 
-scrollToElement : ChildId -> ContainerId -> Task.Task Dom.Error ()
-scrollToElement (ChildId childId) (ContainerId containerId) =
+scrollToElement : { childId : String, containerId : String } -> Task.Task Dom.Error ()
+scrollToElement { childId, containerId } =
     Task.map3
         (\option -> \container -> \viewport -> ( option, container, viewport ))
         (Dom.getElement childId)

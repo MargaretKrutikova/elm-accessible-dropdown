@@ -4,7 +4,7 @@ import Array exposing (..)
 import Browser
 import Html exposing (Html, button, div, input, li, pre, text, ul)
 import Html.Attributes exposing (attribute, class, classList, disabled, id, placeholder, src, style, tabindex, value)
-import Select.Select as Select
+import Select
 
 
 options : Array Option
@@ -53,15 +53,15 @@ main =
 
 type alias Model =
     { select : Select.State
-    , selectedId : String
+    , selectedIds : List String
     , query : String
     }
 
 
 init : () -> ( Model, Cmd Msg )
 init _ =
-    ( { select = Select.initialState { open = False, idAttribute = "dropdown" }
-      , selectedId = "Np"
+    ( { select = Select.initialState { open = False, id = "dropdown" }
+      , selectedIds = []
       , query = ""
       }
     , Cmd.none
@@ -74,7 +74,6 @@ init _ =
 
 type Msg
     = GotSelectMsg Select.Msg
-    | SelectValue ( Option, Select.State )
     | SetQuery String
 
 
@@ -82,34 +81,33 @@ type SelectMsg
     = SelectOption String
 
 
-selectUpdateConfig : Model -> Select.UpdateConfig Option SelectMsg
-selectUpdateConfig model =
-    { toId = .id
-    , closeOnSelect = True
-    , onSelect = SelectOption
-    }
+selectUpdateConfig : Select.UpdateConfig Option SelectMsg
+selectUpdateConfig =
+    Select.updateConfig
+        { toId = .id
+        , onSelect = Just (\id -> Just (SelectOption id))
+        }
 
 
 selectViewConfig : Select.ViewConfig Option Msg
 selectViewConfig =
-    { toId = .id
-    , toLabel = .label
+    Select.viewConfig
+        { toId = .id
+        , toLabel = .label
+        , placeholder = Just "Select ..."
 
-    -- , options =
-    --     Array.filter
-    --         (\option ->
-    --             String.isEmpty model.query
-    --                 || String.contains (String.toLower model.query) (String.toLower option.label)
-    --         )
-    --         options
-    , placeholder = "Select ..."
-    , optionDetails =
-        \option ->
-            { attributes = []
-            , children = [ text (option.label ++ " \u{1F92F}") ]
-            }
-    , toMsg = GotSelectMsg
-    }
+        -- , optionDetails =
+        --     \option ->
+        --         { attributes = []
+        --         , children = [ text (option.label ++ " \u{1F92F}") ]
+        --         }
+        , toMsg = GotSelectMsg
+        }
+
+
+isSelected : Model -> Option -> Bool
+isSelected model option =
+    List.any (\id -> id == option.id) model.selectedIds
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -118,21 +116,26 @@ update msg model =
         GotSelectMsg selectMsg ->
             let
                 ( select, outCmd, outMsg ) =
-                    Select.update (selectUpdateConfig model)
-                        selectMsg
-                        model.select
-                        { selectedOptionId = Just model.selectedId, options = options }
+                    Select.update selectUpdateConfig selectMsg model.select options (isSelected model)
             in
             case outMsg of
                 Nothing ->
                     ( { model | select = select }, Cmd.map GotSelectMsg outCmd )
 
                 Just (SelectOption id) ->
-                    ( { model | select = select, selectedId = id }, Cmd.map GotSelectMsg outCmd )
+                    let
+                        newSelected =
+                            case List.any ((==) id) model.selectedIds of
+                                False ->
+                                    id :: model.selectedIds
 
-        SelectValue ( option, state ) ->
-            ( { model | selectedId = option.id, select = state }, Cmd.none )
+                                True ->
+                                    List.filter ((/=) id) model.selectedIds
+                    in
+                    ( { model | select = select, selectedIds = newSelected }, Cmd.map GotSelectMsg outCmd )
 
+        -- SelectValue ( option, state ) ->
+        --     ( { model | selectedId = Just option.id, select = state }, Cmd.none )
         SetQuery query ->
             ( { model | query = query }, Cmd.none )
 
@@ -159,9 +162,7 @@ view model =
             , style "left" "200px"
             ]
             [ div []
-                [ Select.view selectViewConfig
-                    { options = options, selectedOptionId = Just model.selectedId }
-                    model.select
+                [ Select.view selectViewConfig options (isSelected model) model.select
                 ]
             ]
         ]
