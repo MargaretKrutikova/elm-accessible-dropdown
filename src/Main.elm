@@ -94,7 +94,8 @@ selectViewConfig =
     Select.viewConfig
         { toId = .id
         , toLabel = .label
-        , placeholder = Just "Select ..."
+        , placeholder = "Select ..."
+        , classNamespace = Just "my-cool-dropdown"
 
         -- , optionDetails =
         --     \option ->
@@ -162,7 +163,7 @@ view model =
             , style "left" "200px"
             ]
             [ div []
-                [ Select.view selectViewConfig options (isSelected model) model.select
+                [ Select.view selectViewConfig model.select options (isSelected model)
                 ]
             ]
         ]

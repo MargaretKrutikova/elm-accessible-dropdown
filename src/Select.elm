@@ -97,22 +97,24 @@ type ViewConfig option msg
 
 viewConfig :
     { toId : option -> String
-    , placeholder : Maybe String
+    , placeholder : String
     , toLabel : option -> String
     , toMsg : Msg -> msg
+    , classNamespace : Maybe String
     }
     -> ViewConfig option msg
-viewConfig { toId, placeholder, toLabel, toMsg } =
+viewConfig { toId, placeholder, classNamespace, toLabel, toMsg } =
     ViewConfig
         (Internal.viewConfig
             { toId = toId
             , placeholder = placeholder
             , toLabel = toLabel
             , toMsg = \msg -> toMsg (Msg msg)
+            , classNamespace = classNamespace
             }
         )
 
 
-view : ViewConfig option msg -> Array option -> (option -> Bool) -> State -> Html.Html msg
-view (ViewConfig config) options isSelected (State state) =
-    Internal.view config options isSelected state
+view : ViewConfig option msg -> State -> Array option -> (option -> Bool) -> Html.Html msg
+view (ViewConfig config) (State state) options isSelected =
+    Internal.view config state options isSelected
