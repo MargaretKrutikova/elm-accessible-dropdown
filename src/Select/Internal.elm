@@ -1,11 +1,17 @@
 module Select.Internal exposing
-    ( Msg
+    ( Customizations
+    , HtmlDetails
+    , Msg
+    , OptionStatus
     , State
     , UpdateConfig
     , ViewConfig
     , closeDropdown
+    , customViewConfig
+    , defaultCustomizations
     , defaultKeyPress
     , initialState
+    , openDropdown
     , update
     , updateConfig
     , view
@@ -43,7 +49,7 @@ type Status
 type alias State =
     { status : Status
     , focusedIndex : Maybe Int
-    , dropdownId : String
+    , rootElementId : String
     }
 
 
@@ -55,7 +61,7 @@ initialState :
 initialState { open, id } =
     { status = toStatus open
     , focusedIndex = Nothing
-    , dropdownId = id
+    , rootElementId = id
     }
 
 
@@ -78,6 +84,7 @@ type Msg
     | OptionClick String
     | ScrolledIntoSelected
     | KeyPress KeyPressed
+    | ToggleClick
     | NoOp
 
 
@@ -131,10 +138,18 @@ update config msg state options isSelected =
             closeDropdown state
 
         OpenSelect ->
-            openDropdown config state options isSelected
+            openDropdown config state options isSelected False
 
         OptionClick optionId ->
             ( state, Cmd.none, config.onMouseClick optionId )
+
+        ToggleClick ->
+            case state.status of
+                Open _ ->
+                    closeDropdown state
+
+                Closed ->
+                    openDropdown config state options isSelected False
 
         ScrolledIntoSelected ->
             case state.status of
@@ -161,8 +176,9 @@ openDropdown :
     -> State
     -> Array option
     -> (option -> Bool)
+    -> Bool
     -> ( State, Cmd Msg, Maybe msg )
-openDropdown { toId } state options isSelected =
+openDropdown { toId } state options isSelected shouldFocusSelected =
     let
         selectedId =
             options |> Array.filter isSelected |> Array.get 0 |> Maybe.map toId
@@ -174,9 +190,14 @@ openDropdown { toId } state options isSelected =
         Just optionId ->
             ( { state
                 | status = Open Hidden
-                , focusedIndex = findFirstIndex (\option -> toId option == optionId) options
+                , focusedIndex =
+                    if shouldFocusSelected then
+                        findFirstIndex (\option -> toId option == optionId) options
+
+                    else
+                        Nothing
               }
-            , scrollToOption state.dropdownId optionId ScrolledIntoSelected
+            , scrollToOption state.rootElementId optionId ScrolledIntoSelected
             , Nothing
             )
 
@@ -195,7 +216,7 @@ handleKeyWhenClosed :
     -> ( State, Cmd Msg, Maybe msg )
 handleKeyWhenClosed config state options isSelected key =
     if key == Up || key == Down || key == Enter || key == Space then
-        openDropdown config state options isSelected
+        openDropdown config state options isSelected True
 
     else
         ( state, Cmd.none, Nothing )
@@ -216,7 +237,7 @@ handleKeyWhenOpen config state options isSelected key =
                     handleKeyUp config state (Array.length options)
             in
             ( { state | focusedIndex = index }
-            , scrollToOptionByIndex config state.dropdownId options index
+            , scrollToOptionByIndex config state.rootElementId options index
             , Nothing
             )
 
@@ -226,7 +247,7 @@ handleKeyWhenOpen config state options isSelected key =
                     handleKeyDown config state (Array.length options)
             in
             ( { state | focusedIndex = index }
-            , scrollToOptionByIndex config state.dropdownId options index
+            , scrollToOptionByIndex config state.rootElementId options index
             , Nothing
             )
 
@@ -281,10 +302,10 @@ handleKeyDown config state total =
 
 
 scrollToOptionByIndex : UpdateConfig option msg -> String -> Array option -> Maybe Int -> Cmd Msg
-scrollToOptionByIndex { toId } dropdownId options index =
+scrollToOptionByIndex { toId } rootElementId options index =
     options
         |> Array.get (Maybe.withDefault -1 index)
-        |> Maybe.map (\option -> scrollToOption dropdownId (toId option) NoOp)
+        |> Maybe.map (\option -> scrollToOption rootElementId (toId option) NoOp)
         |> Maybe.withDefault Cmd.none
 
 
@@ -297,10 +318,10 @@ optionIdByIndex toId options index =
 
 
 scrollToOption : String -> String -> Msg -> Cmd Msg
-scrollToOption dropdownId optionId msg =
+scrollToOption rootElementId optionId msg =
     scrollToElement
-        { childId = makeOptionElementId dropdownId optionId
-        , containerId = makeContainerElementId dropdownId
+        { childId = makeOptionElementId rootElementId optionId
+        , containerId = makeContainerElementId rootElementId
         }
         |> Task.attempt (\_ -> msg)
 
@@ -317,8 +338,6 @@ type alias HtmlDetails msg =
 
 type alias ViewConfig option msg =
     { toId : option -> String
-    , toLabel : option -> String
-    , placeholder : String
     , toMsg : Msg -> msg
     , classNamespace : Maybe String
     , customizations : Customizations option msg
@@ -326,7 +345,7 @@ type alias ViewConfig option msg =
 
 
 type alias Customizations option msg =
-    { dropdownAttributes : List (Attribute msg)
+    { selectAttributes : List (Attribute msg)
     , containerAttributes : List (Attribute msg)
     , listAttributes : List (Attribute msg)
     , viewButton : List option -> HtmlDetails msg
@@ -355,17 +374,42 @@ viewConfig :
     -> ViewConfig option msg
 viewConfig config =
     { toId = config.toId
-    , placeholder = config.placeholder
-    , toLabel = config.toLabel
     , toMsg = config.toMsg
     , classNamespace = config.classNamespace
     , customizations =
-        { dropdownAttributes = []
-        , containerAttributes = []
-        , listAttributes = []
-        , viewButton = textDetails << toButtonText config.placeholder config.toLabel
-        , viewOption = \option _ -> config.toLabel option |> textDetails
-        }
+        defaultCustomizations
+            { placeholder = config.placeholder
+            , toLabel = config.toLabel
+            }
+    }
+
+
+customViewConfig :
+    { toId : option -> String
+    , toMsg : Msg -> msg
+    , classNamespace : Maybe String
+    , customizations : Customizations option msg
+    }
+    -> ViewConfig option msg
+customViewConfig config =
+    { toId = config.toId
+    , toMsg = config.toMsg
+    , classNamespace = config.classNamespace
+    , customizations = config.customizations
+    }
+
+
+defaultCustomizations :
+    { placeholder : String
+    , toLabel : option -> String
+    }
+    -> Customizations option msg
+defaultCustomizations { placeholder, toLabel } =
+    { selectAttributes = []
+    , containerAttributes = []
+    , listAttributes = []
+    , viewButton = textDetails << toButtonText placeholder toLabel
+    , viewOption = \option _ -> toLabel option |> textDetails
     }
 
 
@@ -384,16 +428,6 @@ toButtonText placeholder toLabel selectedOptions =
                 |> String.join ", "
 
 
-toggleOpen : State -> Msg
-toggleOpen state =
-    case state.status of
-        Open _ ->
-            Close
-
-        Closed ->
-            OpenSelect
-
-
 view : ViewConfig option msg -> State -> Array option -> (option -> Bool) -> Html msg
 view ({ toMsg, toId, customizations } as config) state options isSelected =
     let
@@ -404,15 +438,15 @@ view ({ toMsg, toId, customizations } as config) state options isSelected =
             mergeClass config
     in
     div
-        ([ Attrs.id state.dropdownId
-         , on "focusout" (onFocusOut toMsg state.dropdownId)
+        ([ Attrs.id state.rootElementId
+         , on "focusout" (onFocusOut toMsg state.rootElementId)
          , preventDefaultOn "keydown" (keyDown state.status (KeyPress >> toMsg))
          ]
             ++ classes ""
-            ++ customizations.dropdownAttributes
+            ++ customizations.selectAttributes
         )
         [ button
-            ([ onClick (toMsg (toggleOpen state)) ]
+            ([ onClick (toMsg ToggleClick) ]
                 ++ classes "-button"
                 ++ buttonDetails.attributes
             )
@@ -427,7 +461,7 @@ viewContainer ({ customizations } as config) state options isSelected =
         Open visibility ->
             let
                 mandatoryAttrs =
-                    [ Attrs.id (makeContainerElementId state.dropdownId) ]
+                    [ Attrs.id (makeContainerElementId state.rootElementId) ]
                         ++ makeContainerStyle visibility
             in
             div
@@ -463,13 +497,13 @@ viewOptionByIndex config state isSelected ( index, option ) =
 
 
 viewOption : ViewConfig option msg -> State -> OptionStatus -> option -> Html msg
-viewOption ({ toId, toMsg, customizations } as config) { dropdownId } { selected, focused } option =
+viewOption ({ toId, toMsg, customizations } as config) { rootElementId } { selected, focused } option =
     let
         optionDetails =
             customizations.viewOption option { selected = selected, focused = focused }
 
         mandatoryAttrs =
-            [ Attrs.id (makeOptionElementId dropdownId (toId option))
+            [ Attrs.id (makeOptionElementId rootElementId (toId option))
             , onClick (OptionClick (toId option) |> toMsg)
             , Attrs.attribute "role" "option"
             ]
@@ -514,7 +548,7 @@ makeContainerElementId id =
 
 
 defaultNamespace =
-    "elm-dropdown"
+    "elm-select"
 
 
 mergeClass : ViewConfig option msg -> String -> List (Attribute msg)
@@ -557,31 +591,31 @@ onFocusOut toMsg id =
 
 
 outsideTarget : String -> String -> Decode.Decoder Msg
-outsideTarget targetName dropdownId =
-    Decode.field targetName (isOutsideDropdown dropdownId)
+outsideTarget targetName rootElementId =
+    Decode.field targetName (isOutsideDropdown rootElementId)
         |> Decode.andThen
             (\isOutside ->
                 if isOutside then
                     Decode.succeed Close
 
                 else
-                    Decode.fail "inside dropdown"
+                    Decode.fail "inside select"
             )
 
 
 isOutsideDropdown : String -> Decode.Decoder Bool
-isOutsideDropdown dropdownId =
+isOutsideDropdown rootElementId =
     Decode.oneOf
         [ Decode.field "id" Decode.string
             |> Decode.andThen
                 (\id ->
-                    if dropdownId == id then
+                    if rootElementId == id then
                         Decode.succeed False
 
                     else
                         Decode.fail "check parent node"
                 )
-        , Decode.lazy (\_ -> isOutsideDropdown dropdownId |> Decode.field "parentNode")
+        , Decode.lazy (\_ -> isOutsideDropdown rootElementId |> Decode.field "parentNode")
         , Decode.succeed True
         ]
 
@@ -602,7 +636,7 @@ keyDown status toMsg =
 shouldPreventDefault : Status -> KeyPressed -> Bool
 shouldPreventDefault status key =
     -- prevent default on Up and Down which will cause the whole screen to scroll,
-    -- and on Enter and Space which will cause the dropdown to close
+    -- and on Enter and Space which will cause the select to close
     key == Up || key == Down || key == Space || key == Enter
 
 

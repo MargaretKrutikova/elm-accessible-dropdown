@@ -4,6 +4,10 @@ module Select exposing
     , UpdateConfig
     , ViewConfig
     , customUpdateConfig
+    , customViewConfig
+    , customizations
+    , customizationsAttrs
+    , customizationsViews
     , initialState
     , update
     , updateConfig
@@ -95,6 +99,18 @@ type ViewConfig option msg
     = ViewConfig (Internal.ViewConfig option msg)
 
 
+type Customizations option msg
+    = Customizations (Internal.Customizations option msg)
+
+
+type alias HtmlDetails msg =
+    Internal.HtmlDetails msg
+
+
+type alias OptionStatus =
+    Internal.OptionStatus
+
+
 viewConfig :
     { toId : option -> String
     , placeholder : String
@@ -109,8 +125,80 @@ viewConfig { toId, placeholder, classNamespace, toLabel, toMsg } =
             { toId = toId
             , placeholder = placeholder
             , toLabel = toLabel
-            , toMsg = \msg -> toMsg (Msg msg)
+            , toMsg = Msg >> toMsg
             , classNamespace = classNamespace
+            }
+        )
+
+
+customizations :
+    { selectAttributes : List (Html.Attribute msg)
+    , containerAttributes : List (Html.Attribute msg)
+    , listAttributes : List (Html.Attribute msg)
+    , viewButton : List option -> HtmlDetails msg
+    , viewOption : option -> OptionStatus -> HtmlDetails msg
+    }
+    -> Customizations option msg
+customizations config =
+    Customizations
+        { selectAttributes = config.selectAttributes
+        , containerAttributes = config.containerAttributes
+        , listAttributes = config.listAttributes
+        , viewButton = config.viewButton
+        , viewOption = config.viewOption
+        }
+
+
+customizationsViews :
+    { viewButton : List option -> HtmlDetails msg
+    , viewOption : option -> OptionStatus -> HtmlDetails msg
+    }
+    -> Customizations option msg
+customizationsViews config =
+    Customizations
+        { selectAttributes = []
+        , containerAttributes = []
+        , listAttributes = []
+        , viewButton = config.viewButton
+        , viewOption = config.viewOption
+        }
+
+
+customizationsAttrs :
+    { placeholder : String
+    , toLabel : option -> String
+    , selectAttributes : List (Html.Attribute msg)
+    , containerAttributes : List (Html.Attribute msg)
+    , listAttributes : List (Html.Attribute msg)
+    }
+    -> Customizations option msg
+customizationsAttrs config =
+    let
+        defaults =
+            Internal.defaultCustomizations { placeholder = config.placeholder, toLabel = config.toLabel }
+    in
+    Customizations
+        { defaults
+            | selectAttributes = config.selectAttributes
+            , containerAttributes = config.containerAttributes
+            , listAttributes = config.listAttributes
+        }
+
+
+customViewConfig :
+    { toId : option -> String
+    , toMsg : Msg -> msg
+    , classNamespace : Maybe String
+    }
+    -> Customizations option msg
+    -> ViewConfig option msg
+customViewConfig { toId, toMsg, classNamespace } (Customizations cs) =
+    ViewConfig
+        (Internal.customViewConfig
+            { toId = toId
+            , toMsg = Msg >> toMsg
+            , classNamespace = classNamespace
+            , customizations = cs
             }
         )
 
