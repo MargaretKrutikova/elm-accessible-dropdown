@@ -61,7 +61,7 @@ type alias Model =
 initialModel : Model
 initialModel =
     { state = Closed
-    , dropdownId = "dropdown"
+    , dropdownId = "elm-dropdown"
     , selectedId = ""
     }
 
@@ -128,9 +128,9 @@ view model =
 viewDropdown : Model -> Html Msg
 viewDropdown model =
     div
-        [ id model.dropdownId, class "dropdown" ]
+        [ id model.dropdownId, class "elm-dropdown" ]
         [ button
-            [ class "dropdown-button", onClick Toggle ]
+            [ class "elm-dropdown-button", onClick Toggle ]
             [ text
                 (model
                     |> getSelectedOption
@@ -141,10 +141,10 @@ viewDropdown model =
         , case model.state of
             Open visibility ->
                 div
-                    ([ class "dropdown-options-container", id (getOptionsContainerId model) ]
+                    ([ class "elm-dropdown-options-container", id (getOptionsContainerId model) ]
                         ++ getStyle visibility
                     )
-                    [ ul [ class "dropdown-options" ]
+                    [ ul [ class "elm-dropdown-options" ]
                         (getDefaultOption :: options |> List.map (viewOption model))
                     ]
 
@@ -159,9 +159,9 @@ viewOption model option =
         [ attribute "role" "option"
         , id (getOptionElementId model option.id)
         , onClick (SelectOption option.id)
-        , class "dropdown-option"
+        , class "elm-dropdown-option"
         , classList
-            [ ( "dropdown-option--selected", model.selectedId == option.id ) ]
+            [ ( "elm-dropdown-option--selected", model.selectedId == option.id ) ]
         ]
         [ text option.label ]
 
@@ -209,7 +209,7 @@ main =
             \model ->
                 case model.state of
                     Open _ ->
-                        Browser.Events.onMouseDown (outsideTarget "dropdown")
+                        Browser.Events.onMouseDown (outsideTarget "elm-dropdown")
 
                     Closed ->
                         Sub.none
@@ -218,7 +218,7 @@ main =
 
 outsideTarget : String -> Decode.Decoder Msg
 outsideTarget dropdownId =
-    Decode.field "target" (isOutsideDropdown "dropdown")
+    Decode.field "target" (isOutsideDropdown "elm-dropdown")
         |> Decode.andThen
             (\isOutside ->
                 if isOutside then

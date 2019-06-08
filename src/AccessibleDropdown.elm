@@ -206,11 +206,9 @@ dropdownElementId =
 view : Model -> Html Msg
 view model =
     div []
-        [ h2 [] [ text "Simple dropdown" ]
+        [ h2 [] [ text "Accessible dropdown" ]
         , div [ class "main" ]
-            [ viewDropdown model
-            , button [ class "test" ] [ text "BLAH" ]
-            ]
+            [ viewDropdown model ]
         ]
 
 
