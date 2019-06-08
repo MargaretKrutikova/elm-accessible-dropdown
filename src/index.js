@@ -1,6 +1,6 @@
 import "./main.css"
-import { Elm } from "./SimpleDropdown.elm"
+import { Elm } from "./AccessibleDropdown.elm"
 
 Elm.Main.init({
-  node: document.getElementById("simple-dropdown")
+  node: document.getElementById("root")
 })
