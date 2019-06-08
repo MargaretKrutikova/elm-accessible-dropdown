@@ -43,6 +43,8 @@ main {
   position: relative;
   width: 250px;
   min-width: 160px;
+  flex: 0 0 auto;
+  height: 100%;
 }
 
 .elm-select-button {
@@ -98,6 +100,7 @@ main {
   border: 1px solid rgba(0, 0, 0, 0.15);
   -webkit-box-shadow: 0 6px 12px rgba(0, 0, 0, 0.175);
   box-shadow: 0 6px 12px rgba(0, 0, 0, 0.175);
+  scroll-behavior: smooth;
 }
 
 .elm-select-list {
@@ -117,6 +120,7 @@ main {
   cursor: pointer;
   transition: background-color 150ms ease-in-out;
   font-size: 1rem;
+  -webkit-tap-highlight-color: transparent;
 
   /* text ellipsis */
   text-overflow: ellipsis;
