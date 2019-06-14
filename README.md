@@ -1,11 +1,16 @@
-# A simple dropdown in elm
+# A keyboard accessible dropdown in elm
 
-An example of dropdown written in elm, supported features:
+An example of a dropdown written in elm, supported features:
 
-- closes on click outside,
-- scrolls into the selected option when opening,
-- animates options when opening,
-- pure Elm, no JS ports 😎
+- full keyboard accessibility
+  - focusable - supports tabbing into,
+  - open on Enter or Space key,
+  - focus options when navigating with arrow keys ⬆️ and ⬇️,
+  - select currently focused option with Enter/Space,
+  - close with Escape or on focus out,
+- close on click outside,
+- scroll into the selected option on open,
+- native Elm with no JS ports 😎
 
 ## Demo
 

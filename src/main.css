@@ -35,6 +35,7 @@ main {
   text-align: left;
   height: 100%;
   padding-left: 50px;
+  display: flex;
 }
 
 /** elm-dropdown */

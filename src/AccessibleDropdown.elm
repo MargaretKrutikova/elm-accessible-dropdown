@@ -221,8 +221,7 @@ viewDropdown model =
         , Events.on "focusout" (onFocusOut "dropdown")
         ]
         [ button
-            [ id "dropdown-button"
-            , class "elm-dropdown-button"
+            [ class "elm-dropdown-button"
             , attribute "aria-haspopup" "listbox"
             , Events.onClick Toggle
             ]
