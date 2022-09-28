@@ -45,7 +45,7 @@ type State
 
 
 type alias Model =
-    { open : Bool
+    { state : State
     , selectedId : Maybe String
     , focusedId : Maybe String
     , options : List Option
@@ -54,7 +54,7 @@ type alias Model =
 
 initialModel : Model
 initialModel =
-    { open = False
+    { state = Closed
     , selectedId = Nothing
     , focusedId = Nothing
     , options = allOptions
@@ -77,7 +77,7 @@ update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         Toggle ->
-            if model.open then
+            if model.state |> isOpen then
                 closeDropdown model
 
             else
@@ -90,7 +90,7 @@ update msg model =
             ( { model | selectedId = Just id }, Cmd.none )
 
         KeyPress key ->
-            if model.open then
+            if model.state |> isOpen then
                 handleKeyWhenOpen model key
 
             else
@@ -174,7 +174,7 @@ openDropdown model =
         focusedId =
             defaultFocused model
     in
-    ( { model | open = True, focusedId = focusedId }
+    ( { model | state = Open, focusedId = focusedId }
     , focusedId |> Maybe.map focusOption |> Maybe.withDefault Cmd.none
     )
 
@@ -191,7 +191,7 @@ defaultFocused model =
 
 closeDropdown : Model -> ( Model, Cmd Msg )
 closeDropdown model =
-    ( { model | open = False, focusedId = Nothing }, Cmd.none )
+    ( { model | state = Closed, focusedId = Nothing }, Cmd.none )
 
 
 
@@ -227,7 +227,7 @@ viewDropdown model =
             ]
             [ text (getButtonText model "Select...")
             ]
-        , if model.open then
+        , if model.state |> isOpen then
             viewList model
 
           else
@@ -405,6 +405,11 @@ toKeyPressed key =
 
 
 -- HELPERS
+
+
+isOpen : State -> Bool
+isOpen state =
+    state == Open
 
 
 findPrev : String -> List String -> Maybe String
