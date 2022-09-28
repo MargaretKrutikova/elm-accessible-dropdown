@@ -1,4 +1,4 @@
-port module Main exposing (main)
+module AccessibleDropdown exposing (main)
 
 import Array exposing (..)
 import Browser
