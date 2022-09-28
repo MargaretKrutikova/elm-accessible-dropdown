@@ -1,14 +1,11 @@
 module AccessibleDropdown exposing (main)
 
-import Array exposing (..)
 import Browser
 import Browser.Dom as Dom
-import Browser.Events
-import Html exposing (Html, button, div, h2, input, li, p, text, ul)
-import Html.Attributes exposing (attribute, class, classList, disabled, id, style, tabindex, value)
+import Html exposing (Html, button, div, h2, li, text, ul)
+import Html.Attributes exposing (attribute, class, classList, id, tabindex)
 import Html.Events as Events
 import Json.Decode as Decode
-import List exposing (..)
 import Task
 
 
