@@ -138,10 +138,12 @@ navigateWithKey model nextId =
     )
 
 
+firstId : List Option -> Maybe String
 firstId =
     List.head >> Maybe.map .id
 
 
+lastId : List Option -> Maybe String
 lastId =
     List.reverse >> firstId
 
@@ -196,6 +198,7 @@ closeDropdown model =
 -- VIEW
 
 
+dropdownElementId : String
 dropdownElementId =
     "dropdown"
 
@@ -287,6 +290,7 @@ getButtonText model placeholder =
                 |> Maybe.withDefault placeholder
 
 
+byId : String -> List Option -> Maybe Option
 byId id =
     List.filter (\option -> option.id == id) >> List.head
 
@@ -363,6 +367,7 @@ keyDecoder =
             )
 
 
+preventDefault : KeyPressed -> Bool
 preventDefault key =
     key == Up || key == Down
 
@@ -399,7 +404,7 @@ toKeyPressed key =
 
 
 
--- HELEPRS
+-- HELPERS
 
 
 findPrev : String -> List String -> Maybe String
