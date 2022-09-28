@@ -73,7 +73,7 @@ type Msg
     | Close
     | SelectOption String
     | KeyPress KeyPressed
-    | NoOp
+    | SetFocusOn String
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -99,7 +99,7 @@ update msg model =
             else
                 handleKeyWhenClosed model key
 
-        _ ->
+        SetFocusOn _ ->
             ( model, Cmd.none )
 
 
@@ -353,7 +353,7 @@ isOutsideDropdown dropdownId =
 
 focusOption : String -> Cmd Msg
 focusOption optionId =
-    Task.attempt (\_ -> NoOp) (Dom.focus optionId)
+    Task.attempt (\_ -> SetFocusOn optionId) (Dom.focus optionId)
 
 
 keyDecoder : Decode.Decoder ( Msg, Bool )
