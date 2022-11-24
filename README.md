@@ -1,6 +1,6 @@
-# A keyboard accessible dropdown in elm
+# A keyboard accessible dropdown in Elm
 
-An example of a dropdown written in elm, supported features:
+An example of a dropdown written in Elm, supported features:
 
 - full keyboard accessibility
   - focusable - supports tabbing into,

@@ -1,14 +1,11 @@
-port module Main exposing (main)
+module AccessibleDropdown exposing (main)
 
-import Array exposing (..)
 import Browser
 import Browser.Dom as Dom
-import Browser.Events
-import Html exposing (Html, button, div, h2, input, li, p, text, ul)
-import Html.Attributes exposing (attribute, class, classList, disabled, id, style, tabindex, value)
+import Html exposing (Html, button, div, h2, li, text, ul)
+import Html.Attributes exposing (attribute, class, classList, id, tabindex)
 import Html.Events as Events
 import Json.Decode as Decode
-import List exposing (..)
 import Task
 
 
@@ -48,7 +45,7 @@ type State
 
 
 type alias Model =
-    { open : Bool
+    { state : State
     , selectedId : Maybe String
     , focusedId : Maybe String
     , options : List Option
@@ -57,7 +54,7 @@ type alias Model =
 
 initialModel : Model
 initialModel =
-    { open = False
+    { state = Closed
     , selectedId = Nothing
     , focusedId = Nothing
     , options = allOptions
@@ -73,14 +70,14 @@ type Msg
     | Close
     | SelectOption String
     | KeyPress KeyPressed
-    | NoOp
+    | SetFocusOn String
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         Toggle ->
-            if model.open then
+            if model.state |> isOpen then
                 closeDropdown model
 
             else
@@ -93,13 +90,13 @@ update msg model =
             ( { model | selectedId = Just id }, Cmd.none )
 
         KeyPress key ->
-            if model.open then
+            if model.state |> isOpen then
                 handleKeyWhenOpen model key
 
             else
                 handleKeyWhenClosed model key
 
-        _ ->
+        SetFocusOn _ ->
             ( model, Cmd.none )
 
 
@@ -141,10 +138,12 @@ navigateWithKey model nextId =
     )
 
 
+firstId : List Option -> Maybe String
 firstId =
     List.head >> Maybe.map .id
 
 
+lastId : List Option -> Maybe String
 lastId =
     List.reverse >> firstId
 
@@ -175,7 +174,7 @@ openDropdown model =
         focusedId =
             defaultFocused model
     in
-    ( { model | open = True, focusedId = focusedId }
+    ( { model | state = Open, focusedId = focusedId }
     , focusedId |> Maybe.map focusOption |> Maybe.withDefault Cmd.none
     )
 
@@ -192,13 +191,14 @@ defaultFocused model =
 
 closeDropdown : Model -> ( Model, Cmd Msg )
 closeDropdown model =
-    ( { model | open = False, focusedId = Nothing }, Cmd.none )
+    ( { model | state = Closed, focusedId = Nothing }, Cmd.none )
 
 
 
 -- VIEW
 
 
+dropdownElementId : String
 dropdownElementId =
     "dropdown"
 
@@ -227,7 +227,7 @@ viewDropdown model =
             ]
             [ text (getButtonText model "Select...")
             ]
-        , if model.open then
+        , if model.state |> isOpen then
             viewList model
 
           else
@@ -290,6 +290,7 @@ getButtonText model placeholder =
                 |> Maybe.withDefault placeholder
 
 
+byId : String -> List Option -> Maybe Option
 byId id =
     List.filter (\option -> option.id == id) >> List.head
 
@@ -353,7 +354,7 @@ isOutsideDropdown dropdownId =
 
 focusOption : String -> Cmd Msg
 focusOption optionId =
-    Task.attempt (\_ -> NoOp) (Dom.focus optionId)
+    Task.attempt (\_ -> SetFocusOn optionId) (Dom.focus optionId)
 
 
 keyDecoder : Decode.Decoder ( Msg, Bool )
@@ -366,6 +367,7 @@ keyDecoder =
             )
 
 
+preventDefault : KeyPressed -> Bool
 preventDefault key =
     key == Up || key == Down
 
@@ -402,7 +404,12 @@ toKeyPressed key =
 
 
 
--- HELEPRS
+-- HELPERS
+
+
+isOpen : State -> Bool
+isOpen state =
+    state == Open
 
 
 findPrev : String -> List String -> Maybe String

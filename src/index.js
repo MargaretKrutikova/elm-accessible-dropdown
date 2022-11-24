@@ -1,6 +1,6 @@
 import "./main.css"
 import { Elm } from "./AccessibleDropdown.elm"
 
-Elm.Main.init({
+Elm.AccessibleDropdown.init({
   node: document.getElementById("root")
 })
